@@ -27,7 +27,10 @@ fn main() {
             // PhysicsDebugPlugin::default(),
         ))
         .add_systems(Startup, startup)
-        .add_systems(Update, ball_collision)
+        .add_systems(
+            Update,
+            ball_collision.after(PhysicsSet::Sync),
+        )
         .run();
 }
 
@@ -47,7 +50,7 @@ fn startup(
     mut materials: ResMut<Assets<ColorMaterial>>,
     mut meshes: ResMut<Assets<Mesh>>,
 ) {
-    let map_size = TilemapSize { x: 32, y: 18 };
+    let map_size = TilemapSize { x: 64, y: 32 };
     let tile_size = TilemapTileSize { x: 16.0, y: 16.0 };
     let grid_size = tile_size.into();
     let map_type = TilemapType::default();
@@ -154,63 +157,76 @@ fn startup(
         ..Default::default()
     });
 
-    let player_ball_radius = 7.5;
+    let player_ball_radius = 9.;
     let player_ball_mesh =
         meshes.add(Circle::new(player_ball_radius));
 
     let blue_material =
         materials.add(Color::rgb(0.36, 0.43, 0.88));
-    commands.spawn((
-        MaterialMesh2dBundle {
-            mesh: player_ball_mesh.clone().into(),
-            material: blue_material.clone(),
-            transform: Transform::from_xyz(
-                -tile_size.x * (map_size.x / 4) as f32,
-                0.,
-                10.0,
-            ),
-            ..default()
-        },
-        RigidBody::Dynamic,
-        Collider::circle(player_ball_radius),
-        LinearVelocity(Vec2::new(-200., -200.)),
-        CollisionLayers::new(
-            [Layer::Player1],
-            [Layer::Player2, Layer::All],
-        ),
-        Restitution::new(1.)
-            .with_combine_rule(CoefficientCombine::Max),
-        Friction::new(0.0)
-            .with_combine_rule(CoefficientCombine::Min),
-        Ball,
-    ));
 
-    let green_material =
-        materials.add(Color::rgb(0.6, 0.9, 0.31));
-    commands.spawn((
-        MaterialMesh2dBundle {
-            mesh: player_ball_mesh.clone().into(),
-            material: green_material.clone(),
-            transform: Transform::from_xyz(
-                tile_size.x * (map_size.x / 4) as f32,
-                0.,
-                10.0,
+    for i in 0..20 {
+        commands.spawn((
+            MaterialMesh2dBundle {
+                mesh: player_ball_mesh.clone().into(),
+                material: blue_material.clone(),
+                transform: Transform::from_xyz(
+                    -tile_size.x * (map_size.x / 4) as f32,
+                    (i - 10) as f32
+                        * 2.
+                        * player_ball_radius,
+                    10.0,
+                ),
+                ..default()
+            },
+            RigidBody::Dynamic,
+            Collider::circle(player_ball_radius),
+            LinearVelocity(Vec2::new(
+                -i as f32 * 50.,
+                -i as f32 * 50.,
+            )),
+            CollisionLayers::new(
+                [Layer::Player1],
+                [Layer::Player2, Layer::All],
             ),
-            ..default()
-        },
-        RigidBody::Dynamic,
-        Collider::circle(player_ball_radius),
-        LinearVelocity(Vec2::new(200., 200.)),
-        CollisionLayers::new(
-            [Layer::Player2],
-            [Layer::Player1, Layer::All],
-        ),
-        Restitution::new(1.)
-            .with_combine_rule(CoefficientCombine::Max),
-        Friction::new(0.0)
-            .with_combine_rule(CoefficientCombine::Min),
-        Ball,
-    ));
+            Restitution::new(1.)
+                .with_combine_rule(CoefficientCombine::Max),
+            Friction::new(0.0)
+                .with_combine_rule(CoefficientCombine::Min),
+            Ball,
+        ));
+
+        let green_material =
+            materials.add(Color::rgb(0.6, 0.9, 0.31));
+        commands.spawn((
+            MaterialMesh2dBundle {
+                mesh: player_ball_mesh.clone().into(),
+                material: green_material.clone(),
+                transform: Transform::from_xyz(
+                    tile_size.x * (map_size.x / 4) as f32,
+                    (i - 10) as f32
+                        * 2.
+                        * player_ball_radius,
+                    10.0,
+                ),
+                ..default()
+            },
+            RigidBody::Dynamic,
+            Collider::circle(player_ball_radius),
+            LinearVelocity(Vec2::new(
+                i as f32 * 50.,
+                i as f32 * 50.,
+            )),
+            CollisionLayers::new(
+                [Layer::Player2],
+                [Layer::Player1, Layer::All],
+            ),
+            Restitution::new(1.)
+                .with_combine_rule(CoefficientCombine::Max),
+            Friction::new(0.0)
+                .with_combine_rule(CoefficientCombine::Min),
+            Ball,
+        ));
+    }
 
     let size = Vec2::new(
         map_size.x as f32 * tile_size.x,
@@ -235,39 +251,45 @@ fn startup(
 }
 
 fn ball_collision(
-    balls: Query<&CollidingEntities, With<Ball>>,
+    mut collision_event_reader: EventReader<CollisionEnded>,
+    balls: Query<Entity, With<Ball>>,
     mut tiles: Query<(
         &mut TileTextureIndex,
         &mut CollisionLayers,
     )>,
 ) {
-    for colliding_entities in &balls {
-        if colliding_entities.is_empty() {
+    for CollisionEnded(entity1, entity2) in
+        collision_event_reader.read()
+    {
+        let Ok((_, other_entity)) = balls
+            .get(*entity1)
+            .map(|b| (b, entity2))
+            .or_else(|_| {
+                balls.get(*entity2).map(|b| (b, entity1))
+            })
+        else {
+            // one of the entities has to be a ball
             continue;
-        }
-        for entity in colliding_entities.iter() {
-            if let Ok((mut texture_index, mut layers)) =
-                tiles.get_mut(*entity)
-            {
-                match texture_index.0 {
-                    0 => {
-                        *texture_index =
-                            TileTextureIndex(1);
-                        *layers = CollisionLayers::new(
-                            [Layer::Player2],
-                            [Layer::Player1],
-                        );
-                    }
-                    1 => {
-                        *texture_index =
-                            TileTextureIndex(0);
-                        *layers = CollisionLayers::new(
-                            [Layer::Player1],
-                            [Layer::Player2],
-                        );
-                    }
-                    _ => {}
+        };
+        let tile = tiles.get_mut(*other_entity);
+
+        if let Ok((mut texture_index, mut layers)) = tile {
+            match texture_index.0 {
+                0 => {
+                    *texture_index = TileTextureIndex(1);
+                    *layers = CollisionLayers::new(
+                        [Layer::Player2],
+                        [Layer::Player1],
+                    );
                 }
+                1 => {
+                    *texture_index = TileTextureIndex(0);
+                    *layers = CollisionLayers::new(
+                        [Layer::Player1],
+                        [Layer::Player2],
+                    );
+                }
+                _ => {}
             }
         }
     }
