@@ -30,7 +30,7 @@ fn main() {
         .add_systems(
             Update,
             ball_collision.after(PhysicsSet::Sync),
-        )
+        )//, ball_speed_fixer
         .run();
 }
 
@@ -50,7 +50,7 @@ fn startup(
     mut materials: ResMut<Assets<ColorMaterial>>,
     mut meshes: ResMut<Assets<Mesh>>,
 ) {
-    let map_size = TilemapSize { x: 64, y: 32 };
+    let map_size = TilemapSize { x: 256, y: 144 };
     let tile_size = TilemapTileSize { x: 16.0, y: 16.0 };
     let grid_size = tile_size.into();
     let map_type = TilemapType::default();
@@ -164,7 +164,7 @@ fn startup(
     let blue_material =
         materials.add(Color::rgb(0.36, 0.43, 0.88));
 
-    for i in 0..20 {
+    for i in 0..200 {
         commands.spawn((
             MaterialMesh2dBundle {
                 mesh: player_ball_mesh.clone().into(),
@@ -181,12 +181,12 @@ fn startup(
             RigidBody::Dynamic,
             Collider::circle(player_ball_radius),
             LinearVelocity(Vec2::new(
-                -i as f32 * 50.,
-                -i as f32 * 50.,
+                -i as f32 * 500.,
+                -i as f32 * 500.,
             )),
             CollisionLayers::new(
                 [Layer::Player1],
-                [Layer::Player2, Layer::All],
+                [Layer::Player1, Layer::Player2, Layer::All],
             ),
             Restitution::new(1.)
                 .with_combine_rule(CoefficientCombine::Max),
@@ -213,12 +213,12 @@ fn startup(
             RigidBody::Dynamic,
             Collider::circle(player_ball_radius),
             LinearVelocity(Vec2::new(
-                i as f32 * 50.,
-                i as f32 * 50.,
+                500.,
+                500.,
             )),
             CollisionLayers::new(
                 [Layer::Player2],
-                [Layer::Player1, Layer::All],
+                [Layer::Player2, Layer::Player1, Layer::All],
             ),
             Restitution::new(1.)
                 .with_combine_rule(CoefficientCombine::Max),
@@ -248,6 +248,20 @@ fn startup(
             [Layer::Player1, Layer::Player2],
         ),
     ));
+}
+
+fn ball_speed_fixer(
+    mut query: Query<&mut LinearVelocity, With<Ball>>,
+) {
+    for mut velocity in query.iter_mut() {
+        if velocity.length() < 0.000001 {
+            *velocity = LinearVelocity::from(velocity.normalize()
+                * 50.);
+            // if velocity.length() < 0.0001 {
+            //     *velocity = LinearVelocity::from(Vec2::new(500., -500.));
+            // }
+        }
+    }
 }
 
 fn ball_collision(
