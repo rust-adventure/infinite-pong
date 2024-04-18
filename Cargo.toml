@@ -9,3 +9,6 @@ edition = "2021"
 bevy = "0.13.2"
 bevy_xpbd_2d = "0.4.2"
 bevy_ecs_tilemap = { git = "https://github.com/StarArawn/bevy_ecs_tilemap", rev = "25def41e029626bb5e84fe7aca1f16a1d6beccdc" }
+
+[profile.dev.package."*"]
+opt-level = 3
